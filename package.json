@@ -1,0 +1,27 @@
+{
+  "name": "cordisc",
+  "version": "0.1.0",
+  "description": "Compiler layer for the Cordis context paradigm — v0: static coeffect checker",
+  "main": "index.js",
+  "scripts": {
+    "test": "vitest run",
+    "build": "tsc",
+    "check": "node dist/cli.js check"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "cordisc": "./dist/cli.js"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
+  },
+  "dependencies": {
+    "cordis": "^4.0.0-rc.8",
+    "ts-morph": "^28.0.0"
+  }
+}
