@@ -35,6 +35,16 @@ export function registerDelegate(ctx: Context, log: string[]) {
   })
 }
 
+/** Bound generator with a typed this — the Service-method idiom; lowered. */
+export function registerBound(ctx: Context, log: string[]) {
+  const runtime = { tag: 'bound' }
+  return ctx.effect(function* (this: { tag: string }) {
+    const tag = this.tag
+    yield () => log.push(`undo:${tag}`)
+    yield () => log.push(`undo:${this.tag}-2`)
+  }.bind(runtime))
+}
+
 /** Async generator — real iteration boundaries, deliberately untouched. */
 export function registerAsync(ctx: Context, log: string[]) {
   return ctx.effect(async function* () {

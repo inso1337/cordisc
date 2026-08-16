@@ -15,7 +15,8 @@ function generatorEffect(ctx, sink) {
   })
 }
 
-// what `cordisc build` emits for the generator above
+// what `cordisc build` emits for the generator above (keep in sync with
+// PRELUDE_LINES in src/build.ts, minus the type annotations)
 function loweredEffect(ctx, sink) {
   return ctx.effect(function () {
     const __cordisc_inverses = []
@@ -23,7 +24,7 @@ function loweredEffect(ctx, sink) {
       let __task
       for (let __i = __cordisc_inverses.length - 1; __i >= 0; __i--) {
         const __d = __cordisc_inverses[__i]
-        if (__task) __task = __task.then(__d)
+        if (__task) __task = __task.then(() => __d())
         else {
           const __r = __d()
           if (__r && typeof __r.then === 'function') __task = __r
@@ -32,11 +33,11 @@ function loweredEffect(ctx, sink) {
       return __task
     }
     const a = { open: true }
-    __cordisc_inverses.push(() => { a.open = false; sink.push(1) })
+    { const __v = () => { a.open = false; sink.push(1) }; if (__v) __cordisc_inverses.push(__v) }
     const b = { open: true }
-    __cordisc_inverses.push(() => { b.open = false; sink.push(2) })
+    { const __v = () => { b.open = false; sink.push(2) }; if (__v) __cordisc_inverses.push(__v) }
     const c = { open: true }
-    __cordisc_inverses.push(() => { c.open = false; sink.push(3) })
+    { const __v = () => { c.open = false; sink.push(3) }; if (__v) __cordisc_inverses.push(__v) }
     return __cordisc_dispose
   })
 }

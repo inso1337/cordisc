@@ -83,7 +83,8 @@ Guarantees:
 
 - **semantics-preserving or untouched** — `yield*`, yields used as expression values, and async generators (which have *real* boundaries for partial rollback) are left intact and reported, never half-transformed;
 - **verified against the real runtime** — the test suite runs original and lowered effects against `cordis` itself and asserts identical disposal logs, including early returns, loops, conditionals, and LIFO order;
-- **measured**: ~1.5× faster create+dispose in a 3-inverse microbenchmark against cordis 4.0.0-rc.8 (`node scripts/bench.mjs`).
+- **measured**: ~1.4× faster create+dispose in a 3-inverse microbenchmark against cordis 4.0.0-rc.8 (`node scripts/bench.mjs`; 1.40–1.49× across runs on an M-series laptop — rerun it yourself rather than trusting a README);
+- **exercised on real code**: lowers DeepSeek Harness's production generator effects, including the `function* (this: Service) {…}.bind(this)` idiom.
 
 ## Programmatic API
 

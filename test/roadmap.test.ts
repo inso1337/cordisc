@@ -99,7 +99,7 @@ describe('cordisc build — sync generator lowering', () => {
   const loweredText = fs.readFileSync(loweredPath, 'utf8')
 
   it('lowers the sync generators and reports the yield* and async bails', () => {
-    expect(result.lowered).toBe(2)
+    expect(result.lowered).toBe(3)
     expect(result.skipped).toHaveLength(2)
     const reasons = result.skipped.map((s) => s.reason).join('\n')
     expect(reasons).toMatch(/yield\*/)
@@ -172,6 +172,14 @@ describe('cordisc build — sync generator lowering', () => {
     const disposeDelegate = lowered.registerDelegate(new Context(), logDelegate)
     await disposeDelegate()
     expect(logDelegate).toEqual(['undo:inner'])
+
+    // bound generator (`function* (this: T) {}.bind(x)`) — this survives
+    for (const mod of [original, lowered]) {
+      const logBound: string[] = []
+      const disposeBound = mod.registerBound(new Context(), logBound)
+      await disposeBound()
+      expect(logBound).toEqual(['undo:bound-2', 'undo:bound'])
+    }
   })
 
   it('disposes in LIFO order (newest inverse first)', async () => {

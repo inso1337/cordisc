@@ -89,8 +89,17 @@ function findEffectGenerators(file: SourceFile): FunctionExpression[] {
     const receiver = callee.getExpression().getType()
     const symbolName = (receiver.getSymbol() ?? receiver.getAliasSymbol())?.getName()
     if (symbolName !== 'Context' && symbolName !== 'Fiber') continue
-    const arg = call.getArguments()[0]
-    if (!arg || !Node.isFunctionExpression(arg)) continue
+    let arg = call.getArguments()[0]
+    if (!arg) continue
+    // `function* (this: T) {…}.bind(this)` — the bound-generator idiom;
+    // the transform edits the function body, the .bind wrapper survives
+    if (Node.isCallExpression(arg)) {
+      const bindCallee = arg.getExpression()
+      if (Node.isPropertyAccessExpression(bindCallee) && bindCallee.getName() === 'bind') {
+        arg = bindCallee.getExpression()
+      }
+    }
+    if (!Node.isFunctionExpression(arg)) continue
     if (!arg.isGenerator()) continue
     found.push(arg)
   }
