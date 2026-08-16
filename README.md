@@ -1,11 +1,11 @@
-# cordisc
+# cordis-compiler
 
-A compiler layer for the [Cordis](https://github.com/cordiverse/cordis) context paradigm — ordinary TypeScript plus a build step, the way JSX and Svelte added their semantics to existing ecosystems.
+A compiler layer for the [Cordis](https://github.com/cordiverse/cordis) context paradigm — the CLI is `cordisc` — ordinary TypeScript plus a build step, the way JSX and Svelte added their semantics to existing ecosystems.
 
 The [Cordis paper](https://github.com/cordiverse/paper) (§5.1.4) notes that undeclared dependency access "is in principle detectable at compile time, by resolving each `ctx[key]` against the declared `d` before execution," and (§6.5) that dependency cycles are "predictable from the dependency declarations alone." Today both surface at runtime. `cordisc` moves them to the build — and moves two runtime costs there with them.
 
 ```bash
-npm install -D cordisc
+npm install -D cordis-compiler   # installs the `cordisc` CLI
 
 cordisc check -p tsconfig.json           # verify coeffect declarations & graph
 cordisc gen   -p tsconfig.json -o ctx.d.ts   # generate Context augmentation + manifest

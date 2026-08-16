@@ -1,6 +1,6 @@
 # Coeffect analysis of DeepSeek Harness — findings report
 
-*Produced by [`cordisc check`](https://github.com/inso1337/cordisc) (static coeffect checker for Cordis) run over the full `deepseek-ai/deepseek-harness` monorepo: 1185 source files across `packages/*/*/src`, 548 discovered components, analyzed against the vendored `@deepseek-ai/cordis` via the repo's own path mappings — no build required.*
+*Produced by [`cordisc check`](https://github.com/inso1337/cordis-compiler) (static coeffect checker for Cordis) run over the full `deepseek-ai/deepseek-harness` monorepo: 1185 source files across `packages/*/*/src`, 548 discovered components, analyzed against the vendored `@deepseek-ai/cordis` via the repo's own path mappings — no build required.*
 
 *This report is drafted for an upstream discussion; nothing has been filed yet.*
 

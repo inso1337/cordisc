@@ -1,5 +1,5 @@
 {
-  "name": "cordisc",
+  "name": "cordis-compiler",
   "version": "0.1.0",
   "description": "Compiler layer for the Cordis context paradigm: static coeffect checking, Context augmentation codegen, and effect state-machine lowering",
   "main": "./dist/index.js",
@@ -41,7 +41,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/inso1337/cordisc.git"
+    "url": "git+https://github.com/inso1337/cordis-compiler.git"
   },
   "engines": {
     "node": ">=22.4"
