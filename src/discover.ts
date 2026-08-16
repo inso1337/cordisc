@@ -8,12 +8,19 @@ import { Component, Diagnostic, diagnosticAt } from './types.js'
  *   ['database', 'server']
  *   { database: true, server: { required: false } }
  */
-function readInject(node: Node): { keys: Set<string>; dynamic: boolean } {
+function readInject(node: Node, depth = 0): { keys: Set<string>; dynamic: boolean } {
   const keys = new Set<string>()
   let dynamic = false
-  const unwrapped = unwrap(node)
+  const unwrapped = resolveExpression(node, depth)
+  if (!unwrapped) return { keys, dynamic: true }
   if (Node.isArrayLiteralExpression(unwrapped)) {
     for (const el of unwrapped.getElements()) {
+      if (Node.isSpreadElement(el)) {
+        const nested = readInject(el.getExpression(), depth + 1)
+        for (const key of nested.keys) keys.add(key)
+        if (nested.dynamic) dynamic = true
+        continue
+      }
       const text = stringValue(el)
       if (text === undefined) dynamic = true
       else keys.add(text)
@@ -22,6 +29,10 @@ function readInject(node: Node): { keys: Set<string>; dynamic: boolean } {
     for (const prop of unwrapped.getProperties()) {
       if (Node.isPropertyAssignment(prop) || Node.isShorthandPropertyAssignment(prop)) {
         keys.add(prop.getName().replace(/^['"`]|['"`]$/g, ''))
+      } else if (Node.isSpreadAssignment(prop)) {
+        const nested = readInject(prop.getExpression(), depth + 1)
+        for (const key of nested.keys) keys.add(key)
+        if (nested.dynamic) dynamic = true
       } else {
         dynamic = true
       }
@@ -30,6 +41,24 @@ function readInject(node: Node): { keys: Set<string>; dynamic: boolean } {
     dynamic = true
   }
   return { keys, dynamic }
+}
+
+/**
+ * Resolve an expression to its literal initializer, following identifiers
+ * (including cross-file imports of `const` declarations) a bounded number
+ * of hops. Returns undefined when resolution fails.
+ */
+function resolveExpression(node: Node, depth: number): Node | undefined {
+  if (depth > 5) return undefined
+  const unwrapped = unwrap(node)
+  if (!Node.isIdentifier(unwrapped)) return unwrapped
+  for (const definition of unwrapped.getDefinitionNodes()) {
+    if (Node.isVariableDeclaration(definition)) {
+      const initializer = definition.getInitializer()
+      if (initializer) return resolveExpression(initializer, depth + 1)
+    }
+  }
+  return undefined
 }
 
 function readProvide(node: Node): Set<string> {
@@ -158,7 +187,8 @@ export function discoverComponents(file: SourceFile, diagnostics: Diagnostic[]):
     if (!Node.isPropertyAccessExpression(expr) || expr.getName() !== 'inject') continue
     const [injectArg, callback] = call.getArguments()
     if (!injectArg || !callback) continue
-    if (!Node.isFunctionLikeDeclaration(unwrap(callback))) continue
+    const callbackFn = unwrap(callback)
+    if (!Node.isFunctionExpression(callbackFn) && !Node.isArrowFunction(callbackFn) && !Node.isFunctionDeclaration(callbackFn)) continue
     const component = makeComponent(`${baseName(file)}#inline`, call, [unwrap(callback)])
     const { keys, dynamic } = readInject(injectArg)
     component.inject = keys

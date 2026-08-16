@@ -1,0 +1,8 @@
+export { analyze } from './analyze.js'
+export type { AnalyzeOptions, AnalyzeOutput } from './analyze.js'
+export { build } from './build.js'
+export type { BuildResult } from './build.js'
+export { generate } from './gen.js'
+export type { GenOptions, GenResult } from './gen.js'
+export { report } from './report.js'
+export type { AnalysisResult, Component, Diagnostic, Severity } from './types.js'

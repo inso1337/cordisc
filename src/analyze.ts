@@ -1,14 +1,21 @@
 import { Node, Project } from 'ts-morph'
+import path from 'node:path'
 import { AnalysisResult, Component, Diagnostic } from './types.js'
 import { discoverComponents } from './discover.js'
 import { checkComponent } from './check.js'
 import { analyzeGraph } from './graph.js'
+import { probeContextType } from './gen.js'
 
 export interface AnalyzeOptions {
-  /** Path to a tsconfig.json — preferred, gives full type resolution. */
-  project?: string
+  /** One or more tsconfig.json paths — multiple merge into one graph. */
+  project?: string | string[]
   /** Explicit file paths/globs, used when no tsconfig is given. */
   files?: string[]
+}
+
+export interface AnalyzeOutput extends AnalysisResult {
+  /** The underlying ts-morph projects (one per tsconfig), for `gen`. */
+  projects: Project[]
 }
 
 /**
@@ -42,20 +49,24 @@ function mergeInstantiatedClasses(components: Component[]): void {
   }
 }
 
-export function analyze(options: AnalyzeOptions): AnalysisResult {
-  const project = options.project
-    ? new Project({ tsConfigFilePath: options.project })
-    : new Project({ compilerOptions: { allowJs: false, strict: false } })
-  if (!options.project && options.files?.length) {
-    project.addSourceFilesAtPaths(options.files)
+export function analyze(options: AnalyzeOptions): AnalyzeOutput {
+  const projectPaths = typeof options.project === 'string' ? [options.project] : options.project ?? []
+  const projects = projectPaths.length
+    ? projectPaths.map((p) => new Project({ tsConfigFilePath: p }))
+    : [new Project({ compilerOptions: { allowJs: false, strict: false } })]
+  if (!projectPaths.length && options.files?.length) {
+    projects[0]!.addSourceFilesAtPaths(options.files)
   }
 
   const diagnostics: Diagnostic[] = []
   const components: Component[] = []
 
-  for (const file of project.getSourceFiles()) {
-    if (file.getFilePath().includes('/node_modules/')) continue
-    components.push(...discoverComponents(file, diagnostics))
+  for (const project of projects) {
+    for (const file of project.getSourceFiles()) {
+      const filePath = file.getFilePath()
+      if (filePath.includes('/node_modules/') || filePath.includes('__cordisc_probe')) continue
+      components.push(...discoverComponents(file, diagnostics))
+    }
   }
 
   mergeInstantiatedClasses(components)
@@ -64,12 +75,34 @@ export function analyze(options: AnalyzeOptions): AnalysisResult {
     checkComponent(component, diagnostics)
   }
 
-  const loadOrder = analyzeGraph(components, diagnostics)
+  // provider hints: when an unresolved key's type is declared by some
+  // package's module augmentation, say which one
+  const contextTypes = projects
+    .map((project) => probeContextType(project, 'cordis'))
+    .filter((type) => type !== undefined)
+  const hint = (key: string): string | undefined => {
+    for (const type of contextTypes) {
+      const prop = type.getProperty(key)
+      const decl = prop?.getDeclarations()[0]
+      if (!decl) continue
+      const filePath = decl.getSourceFile().getFilePath()
+      const packageMatch = filePath.match(/node_modules\/((?:@[^/]+\/)?[^/]+)/)
+      if (packageMatch && packageMatch[1] !== 'cordis') {
+        return `its type is declared by package "${packageMatch[1]}" — make sure its provider is loaded`
+      }
+      if (!packageMatch) {
+        return `its type is declared in ${path.basename(filePath)} — a provider for it exists somewhere in this codebase`
+      }
+    }
+    return undefined
+  }
+
+  const loadOrder = analyzeGraph(components, diagnostics, hint)
 
   const severityRank = { error: 0, warning: 1, info: 2 } as const
   diagnostics.sort((a, b) =>
     severityRank[a.severity] - severityRank[b.severity] ||
     a.file.localeCompare(b.file) || a.line - b.line)
 
-  return { components, diagnostics, loadOrder }
+  return { components, diagnostics, loadOrder, projects }
 }

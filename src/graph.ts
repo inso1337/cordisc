@@ -10,7 +10,11 @@ import { Component, Diagnostic, diagnosticAt } from './types.js'
  * inactive" — predictable from the declarations alone, so we report it
  * at build time).
  */
-export function analyzeGraph(components: Component[], diagnostics: Diagnostic[]): string[] {
+export function analyzeGraph(
+  components: Component[],
+  diagnostics: Diagnostic[],
+  hint?: (key: string) => string | undefined,
+): string[] {
   const providerOf = new Map<string, Component>()
   for (const component of components) {
     for (const key of component.provides) {
@@ -30,8 +34,9 @@ export function analyzeGraph(components: Component[], diagnostics: Diagnostic[])
     for (const key of component.inject) {
       const provider = providerOf.get(key)
       if (!provider) {
+        const extra = hint?.(key)
         diagnostics.push(diagnosticAt(component.decl, 'info', 'unresolved-provider',
-          `no component in this project provides "${key}" (required by "${component.name}") — it must come from outside, or "${component.name}" stays inactive`))
+          `no component in this project provides "${key}" (required by "${component.name}") — it must come from outside, or "${component.name}" stays inactive${extra ? `; ${extra}` : ''}`))
         continue
       }
       if (provider !== component) deps.add(provider)
