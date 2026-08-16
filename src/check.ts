@@ -145,7 +145,7 @@ export function checkComponent(component: Component, diagnostics: Diagnostic[], 
         if (!isContextType(callee.getExpression().getType())) return
         const keyArg = node.getArguments()[0]
         if (!keyArg || !Node.isStringLiteral(keyArg)) return
-        markServiceUse(component, node, keyArg.getLiteralText(), diagnostics)
+        markServiceUse(component, node, keyArg.getLiteralText(), diagnostics, method === 'get')
       }
     })
   }
@@ -176,7 +176,7 @@ function verifyAccess(component: Component, node: Node, name: string, contextTyp
   markServiceUse(component, node, name, diagnostics)
 }
 
-function markServiceUse(component: Component, node: Node, key: string, diagnostics: Diagnostic[]): void {
+function markServiceUse(component: Component, node: Node, key: string, diagnostics: Diagnostic[], soft = false): void {
   if (component.provides.has(key)) {
     component.used.add(key)
     return
@@ -186,6 +186,15 @@ function markServiceUse(component: Component, node: Node, key: string, diagnosti
     return
   }
   if (component.injectDynamic) return
+  if (soft) {
+    // ctx.get() is the sanctioned soft access — it returns undefined
+    // instead of throwing. Still an undeclared dependency: invisible to
+    // the orchestrator, and non-reactive (a provider loading later goes
+    // unnoticed). Optional inject gives both back.
+    diagnostics.push(diagnosticAt(node, 'warning', 'undeclared-optional-coeffect',
+      `"${component.name}" soft-reads service "${key}" without declaring it — declare { ${key}: { required: false } } in inject to make the dependency visible and reactive`))
+    return
+  }
   diagnostics.push(diagnosticAt(node, 'error', 'undeclared-coeffect',
     `"${component.name}" accesses service "${key}" without declaring it — add "${key}" to inject (paper §5.1.4: undeclared access fails at runtime)`))
 }

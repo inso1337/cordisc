@@ -16,7 +16,8 @@ cordisc build -p tsconfig.json -o dist-lowered  # lower sync generator effects
 
 | code | severity | meaning |
 |---|---|---|
-| `undeclared-coeffect` | error | `ctx.foo` (or `ctx.get('foo')`) where `foo` is a service key not in the component's `inject` and not self-provided |
+| `undeclared-coeffect` | error | `ctx.foo` (or `ctx.set('foo', …)`) where `foo` is a service key not in the component's `inject` and not self-provided — throws at runtime |
+| `undeclared-optional-coeffect` | warning | undeclared `ctx.get('foo')` — the sanctioned soft access, but the dependency is invisible to the orchestrator and non-reactive; declare `{ foo: { required: false } }` |
 | `dependency-cycle` | error | components whose inject/provide graph is cyclic — they can never activate (paper §6.5) |
 | `self-dependency` | error | a component that injects a key it provides |
 | `duplicate-provider` | error | two components providing the same key (provisions must be disjoint, paper Def. 43) |

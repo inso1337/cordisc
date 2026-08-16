@@ -17,12 +17,17 @@ describe('cordisc check — fixture app', () => {
     ])
   })
 
-  it('errors on undeclared coeffect access, including reflective ctx.get()', () => {
+  it('errors on undeclared hard access; warns on undeclared soft ctx.get()', () => {
     const undeclared = result.diagnostics.filter((d) => d.code === 'undeclared-coeffect')
-    expect(undeclared).toHaveLength(2)
-    expect(undeclared.map((d) => d.message).join('\n')).toMatch(/"database"/)
-    expect(undeclared.map((d) => d.message).join('\n')).toMatch(/"cache"/)
-    expect(undeclared.every((d) => d.file.endsWith('bad-consumer.ts'))).toBe(true)
+    expect(undeclared).toHaveLength(1)
+    expect(undeclared[0]!.message).toMatch(/"database"/)
+    expect(undeclared[0]!.file.endsWith('bad-consumer.ts')).toBe(true)
+    // ctx.get() returns undefined instead of throwing — softer diagnostic
+    const optional = result.diagnostics.filter((d) => d.code === 'undeclared-optional-coeffect')
+    expect(optional).toHaveLength(1)
+    expect(optional[0]!.severity).toBe('warning')
+    expect(optional[0]!.message).toMatch(/"cache"/)
+    expect(optional[0]!.message).toMatch(/required: false/)
   })
 
   it('errors on dependency cycles with the cycle path', () => {
