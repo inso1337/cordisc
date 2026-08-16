@@ -6,7 +6,6 @@
   "scripts": {
     "test": "vitest run",
     "build": "tsc",
-    "check": "node dist/cli.js check",
     "pretest": "tsc",
     "prepack": "tsc"
   },

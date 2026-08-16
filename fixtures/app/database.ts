@@ -6,5 +6,5 @@ export const provide = 'database'
 
 export function apply(ctx: Context) {
   const db: Database = { query: async () => [] }
-  ctx.set('database', db)
+  ctx.provide('database', db)
 }

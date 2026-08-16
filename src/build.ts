@@ -17,20 +17,26 @@ interface Edit {
   text: string
 }
 
-const PRELUDE = `const __cordisc_inverses: Array<() => unknown> = []
-const __cordisc_dispose = () => {
-  let __task: any
-  for (let __i = __cordisc_inverses.length - 1; __i >= 0; __i--) {
-    const __d = __cordisc_inverses[__i]
-    if (__task) __task = __task.then(__d)
-    else {
-      const __r = __d()
-      if (__r && typeof (__r as any).then === 'function') __task = __r
-    }
-  }
-  return __task
+const PRELUDE_LINES = [
+  'const __cordisc_inverses: Array<() => unknown> = []',
+  'const __cordisc_dispose = () => {',
+  '  let __task: Promise<unknown> | undefined',
+  '  for (let __i = __cordisc_inverses.length - 1; __i >= 0; __i--) {',
+  '    const __d = __cordisc_inverses[__i]!',
+  '    if (__task) __task = __task.then(() => __d())',
+  '    else {',
+  '      const __r = __d()',
+  "      if (__r && typeof (__r as Promise<unknown>).then === 'function') __task = __r as Promise<unknown>",
+  '    }',
+  '  }',
+  '  return __task',
+  '}',
+]
+
+/** The prelude, indented to match the statement it is inserted before. */
+function prelude(indent: string): string {
+  return PRELUDE_LINES.map((line, i) => (i === 0 ? line : indent + line)).join('\n') + '\n' + indent
 }
-`
 
 /**
  * Lower synchronous generator effect callbacks into single closures.
@@ -74,7 +80,7 @@ export function build(options: { project: string; outDir: string }): BuildResult
   return result
 }
 
-/** Find synchronous generator function expressions passed to `.effect()`. */
+/** Find generator function expressions (sync or async) passed to `.effect()`. */
 function findEffectGenerators(file: SourceFile): FunctionExpression[] {
   const found: FunctionExpression[] = []
   for (const call of file.getDescendantsOfKind(SyntaxKind.CallExpression)) {
@@ -85,7 +91,7 @@ function findEffectGenerators(file: SourceFile): FunctionExpression[] {
     if (symbolName !== 'Context' && symbolName !== 'Fiber') continue
     const arg = call.getArguments()[0]
     if (!arg || !Node.isFunctionExpression(arg)) continue
-    if (!arg.isGenerator() || arg.isAsync()) continue
+    if (!arg.isGenerator()) continue
     found.push(arg)
   }
   return found
@@ -97,6 +103,7 @@ function findEffectGenerators(file: SourceFile): FunctionExpression[] {
  * cannot preserve.
  */
 function collectEdits(fn: FunctionExpression, edits: Edit[]): string | undefined {
+  if (fn.isAsync()) return 'async generator — real iteration boundaries (partial rollback between awaits); lowering is a non-goal'
   const body = fn.getBody()
   if (!Node.isBlock(body)) return 'generator body is not a block'
 
@@ -127,15 +134,17 @@ function collectEdits(fn: FunctionExpression, edits: Edit[]): string | undefined
   pending.push({ start: asterisk.getStart(), end: asterisk.getEnd(), text: '' })
 
   const statements = body.getStatements()
-  const preludePos = statements.length ? statements[0]!.getStart() : body.getEnd() - 1
-  pending.push({ start: preludePos, end: preludePos, text: PRELUDE })
+  const first = statements[0]
+  const indent = first ? ' '.repeat(first.getStart() - first.getStartLinePos()) : '  '
+  const preludePos = first ? first.getStart() : body.getEnd() - 1
+  pending.push({ start: preludePos, end: preludePos, text: prelude(indent) })
 
   for (const statement of yields) {
     const expr = (statement.getChildAtIndex(0) as any).getExpression().getText()
     pending.push({
       start: statement.getStart(),
       end: statement.getEnd(),
-      text: `{ const __v = ${expr}; if (__v) __cordisc_inverses.push(__v as () => unknown) }`,
+      text: `{ const __v = ${expr}; if (__v) __cordisc_inverses.push(__v) }`,
     })
   }
 
@@ -145,7 +154,7 @@ function collectEdits(fn: FunctionExpression, edits: Edit[]): string | undefined
       start: statement.getStart(),
       end: statement.getEnd(),
       text: expr
-        ? `{ const __v = ${expr}; if (__v) __cordisc_inverses.push(__v as () => unknown); return __cordisc_dispose }`
+        ? `{ const __v = ${expr}; if (__v) __cordisc_inverses.push(__v); return __cordisc_dispose }`
         : `return __cordisc_dispose`,
     })
   }
@@ -153,7 +162,7 @@ function collectEdits(fn: FunctionExpression, edits: Edit[]): string | undefined
   const last = statements.at(-1)
   if (!last || !Node.isReturnStatement(last)) {
     const closePos = body.getEnd() - 1
-    pending.push({ start: closePos, end: closePos, text: '\nreturn __cordisc_dispose\n' })
+    pending.push({ start: closePos, end: closePos, text: `${indent}return __cordisc_dispose\n` })
   }
 
   edits.push(...pending)

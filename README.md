@@ -33,15 +33,17 @@ Also prints a provider-first **load order** for the acyclic part of the graph. `
 
 ### How service keys are told apart from core API
 
-The cordis `Context` type grows by module augmentation: core members are declared inside `node_modules/cordis`, while every service key is declared by some other package's `declare module 'cordis' { interface Context { … } }`. `cordisc` resolves each `ctx.foo` through the TypeScript type checker and classifies the property by where its declaration lives. No annotations, no config: the augmentation you already write for type safety *is* the coeffect declaration.
+The cordis `Context` type grows by module augmentation: framework members are declared by the package that declares the `Context` class itself, while every service key is declared by some other package's `declare module '…' { interface Context { … } }`. `cordisc` resolves each `ctx.foo` through the TypeScript type checker and classifies the property by **symbol origin**: builtin when its declaration lives in a home package of the Context type (the class's own package, plus base-class packages), service otherwise. No annotations, no config, no hardcoded package names — it works identically for upstream `cordis`, a vendored fork like DeepSeek Harness's `@deepseek-ai/cordis` (resolved via `paths` to `vendor/cordis/src`), or a downstream Context subclass like Koishi's. The module specifier Context is imported from is auto-detected (majority vote over imports) and overridable with `--module`.
+
+Validated against real code: running `check` over DeepSeek Harness's `system-prompt`, `agent-loop`, and `session` packages produces zero false errors on framework API and surfaces genuine undeclared-access candidates.
 
 ### Recognized component shapes
 
 - module-as-component (`export const inject = […]; export function apply(ctx) {}` — the Koishi convention), with `provide`/`name` exports
 - plugin object literals (`{ name, inject, provide, apply }`)
-- class components (`static inject`, `constructor(ctx)`), including `Service` subclasses (`super(ctx, 'key')` records the provision; a class `new`-ed inside another component is folded into it)
-- inline `ctx.inject([…], (ctx) => {…})`
-- `ctx.set('key', …)` / `ctx.provide('key')` observed in a body are recorded as provisions
+- class components (`static inject`, or a `Service` base class — `super(ctx, 'key')` records the provision; a class `new`-ed inside another component is folded into it; plain classes that merely take a `ctx` are *not* treated as components)
+- inline `ctx.inject([…], (ctx) => {…})` — checked as a component of its own, and excluded from its enclosing component's scan
+- `ctx.provide('key', …)` records a provision; `ctx.set('key', …)` is a *write* to an existing binding and is checked as usage (matching cordis v4, where set-without-provide throws); `ctx.accessor` is neither
 
 ## `cordisc gen` — augmentation & manifest generation
 

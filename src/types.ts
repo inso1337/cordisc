@@ -1,4 +1,4 @@
-import type { Node, SourceFile } from 'ts-morph'
+import type { Node } from 'ts-morph'
 
 /** A discovered Cordis component (the paper's ⟨d, p, e⟩ triple, statically). */
 export interface Component {
@@ -45,6 +45,3 @@ export function diagnosticAt(node: Node, severity: Severity, code: string, messa
   return { severity, code, message, file: file.getFilePath(), line, column }
 }
 
-export function fileDiagnostic(file: SourceFile, severity: Severity, code: string, message: string): Diagnostic {
-  return { severity, code, message, file: file.getFilePath(), line: 1, column: 1 }
-}

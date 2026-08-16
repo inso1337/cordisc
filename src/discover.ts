@@ -98,9 +98,13 @@ function stringValue(node: Node): string | undefined {
 }
 
 function baseName(file: SourceFile): string {
-  const base = path.basename(file.getFilePath()).replace(/\.[cm]?tsx?$/, '')
-  if (base !== 'index') return base
-  return path.basename(path.dirname(file.getFilePath()))
+  const parts = file.getFilePath().split('/')
+  let base = parts.pop()!.replace(/\.[cm]?tsx?$/, '')
+  // index.ts names its directory; src/lib name their package
+  while (['index', 'src', 'lib'].includes(base) && parts.length) {
+    base = parts.pop()!
+  }
+  return base
 }
 
 /**
@@ -152,12 +156,15 @@ export function discoverComponents(file: SourceFile, diagnostics: Diagnostic[]):
     components.push(component)
   }
 
-  // C: exported classes with constructor(ctx, ...)
+  // C: exported class components. A bare constructor(ctx) is too weak a
+  // signal (real codebases pass ctx into plain data classes) — require a
+  // `static inject` or a Service base class.
   for (const cls of file.getClasses()) {
     if (!isExported(cls)) continue
     const ctor = cls.getConstructors()[0]
     const staticInject = cls.getStaticMember('inject')
-    if (!ctor && !staticInject) continue
+    const extendsService = cls.getExtends()?.getText().includes('Service') ?? false
+    if (!staticInject && !extendsService) continue
     const component = makeComponent(cls.getName() ?? baseName(file), cls, [])
     component.className = cls.getName()
     if (ctor) component.bodies.push(ctor)

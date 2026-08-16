@@ -17,6 +17,7 @@ Options:
   -p, --project <tsconfig>   tsconfig.json (repeatable for check: merged graph)
   -o, --out <path>           gen: output .d.ts; build: output directory
       --manifest <path>      gen: also write a component manifest (JSON)
+      --module <name>        Context package (auto-detected; e.g. '@deepseek-ai/cordis')
       --json                 check: machine-readable output
       --no-color             plain text output
   -h, --help                 show this message
@@ -32,6 +33,7 @@ export function main(argv = process.argv.slice(2)): number {
       project: { type: 'string', short: 'p', multiple: true },
       out: { type: 'string', short: 'o' },
       manifest: { type: 'string' },
+      module: { type: 'string' },
       json: { type: 'boolean', default: false },
       color: { type: 'boolean', default: true },
       help: { type: 'boolean', short: 'h', default: false },
@@ -51,7 +53,7 @@ export function main(argv = process.argv.slice(2)): number {
       console.log(HELP)
       return 2
     }
-    const result = analyze({ project: projects, files })
+    const result = analyze({ project: projects, files, contextModule: values.module })
     if (values.json) {
       console.log(JSON.stringify({
         components: result.components.map((c) => ({
@@ -74,8 +76,8 @@ export function main(argv = process.argv.slice(2)): number {
       console.error('gen requires exactly one -p <tsconfig>')
       return 2
     }
-    const result = analyze({ project: projects })
-    const gen = generate(result.projects[0]!, result)
+    const result = analyze({ project: projects, contextModule: values.module })
+    const gen = generate(result.projects[0]!, result, { moduleName: result.contextModule })
     if (values.manifest) {
       fs.writeFileSync(values.manifest, JSON.stringify({
         components: result.components.map((c) => ({

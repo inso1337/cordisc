@@ -84,10 +84,37 @@ describe('cordisc build — sync generator lowering', () => {
   const loweredPath = path.join(outDir, 'effects.ts')
   const loweredText = fs.readFileSync(loweredPath, 'utf8')
 
-  it('lowers the sync generators and reports the yield* bail', () => {
+  it('lowers the sync generators and reports the yield* and async bails', () => {
     expect(result.lowered).toBe(2)
-    expect(result.skipped).toHaveLength(1)
-    expect(result.skipped[0]!.reason).toMatch(/yield\*/)
+    expect(result.skipped).toHaveLength(2)
+    const reasons = result.skipped.map((s) => s.reason).join('\n')
+    expect(reasons).toMatch(/yield\*/)
+    expect(reasons).toMatch(/async generator/)
+  })
+
+  it('lowered output type-checks under strict TypeScript', async () => {
+    const { Project } = await import('ts-morph')
+    const project = new Project({
+      compilerOptions: {
+        target: 9 /* ES2022 */,
+        module: 199 /* NodeNext */,
+        moduleResolution: 99 /* NodeNext */,
+        strict: true,
+        noEmit: true,
+        skipLibCheck: true,
+      },
+    })
+    project.addSourceFilesAtPaths(path.join(outDir, '**/*.ts'))
+    const errors = project.getPreEmitDiagnostics()
+      .filter((d) => d.getCategory() === 1 /* Error */)
+      .map((d) => `${d.getSourceFile()?.getBaseName()}:${d.getLineNumber()} ${typeof d.getMessageText() === 'string' ? d.getMessageText() : JSON.stringify(d.getMessageText())}`)
+    expect(errors).toEqual([])
+  })
+
+  it('emitted code carries no `any` and matches surrounding indentation', () => {
+    expect(loweredText).not.toMatch(/\bany\b/)
+    // prelude lines inside the callback are indented like their siblings
+    expect(loweredText).toMatch(/\n    const __cordisc_dispose = /)
   })
 
   it('removes the generator machinery from lowered effects', () => {
