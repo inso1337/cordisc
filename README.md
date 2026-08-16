@@ -20,7 +20,7 @@ cordisc build -p tsconfig.json -o dist-lowered  # lower sync generator effects
 | `undeclared-optional-coeffect` | warning | undeclared `ctx.get('foo')` — the sanctioned soft access, but the dependency is invisible to the orchestrator and non-reactive; declare `{ foo: { required: false } }` |
 | `dependency-cycle` | error | components whose inject/provide graph is cyclic — they can never activate (paper §6.5) |
 | `self-dependency` | error | a component that injects a key it provides |
-| `duplicate-provider` | error | two components providing the same key (provisions must be disjoint, paper Def. 43) |
+| `duplicate-provider` | error / warning | two components providing the same key (provisions must be disjoint, paper Def. 43) — downgraded to warning within one package (usually host/client build faces), suppressed for a nested registration of its enclosing component's key |
 | `unused-inject` | warning | declared but never accessed inject key |
 | `unknown-context-member` | warning | `ctx.foo` declared neither by cordis nor by any module augmentation |
 | `unresolved-provider` | info | injected key no component in the project provides — with a hint naming the package or file whose augmentation declares it |
@@ -43,7 +43,8 @@ Validated against real code: running `check` over DeepSeek Harness's `system-pro
 - module-as-component (`export const inject = […]; export function apply(ctx) {}` — the Koishi convention), with `provide`/`name` exports
 - plugin object literals (`{ name, inject, provide, apply }`)
 - class components (`static inject`, or a `Service` base class — `super(ctx, 'key')` records the provision; a class `new`-ed inside another component is folded into it; plain classes that merely take a `ctx` are *not* treated as components)
-- inline `ctx.inject([…], (ctx) => {…})` — checked as a component of its own, and excluded from its enclosing component's scan
+- inline `ctx.inject([…], (ctx) => {…})` — checked as a component of its own, excluded from its enclosing component's scan, and resolving declarations **along the component chain** (a child context may read any key an enclosing component declared, exactly as the runtime's fiber-chain walk permits)
+- `ctx.accessor(…)`-declared members are exempt from declaration checking (they resolve through their own getter, not inject gating)
 - `ctx.provide('key', …)` records a provision; `ctx.set('key', …)` is a *write* to an existing binding and is checked as usage (matching cordis v4, where set-without-provide throws); `ctx.accessor` is neither
 
 ## `cordisc gen` — augmentation & manifest generation

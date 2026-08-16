@@ -1,4 +1,5 @@
 import { Component, Diagnostic, diagnosticAt } from './types.js'
+import { packageRootOf } from './check.js'
 
 /**
  * Build the coeffect dependency graph (edge: consumer → provider), report
@@ -16,12 +17,26 @@ export function analyzeGraph(
   hint?: (key: string) => string | undefined,
 ): string[] {
   const providerOf = new Map<string, Component>()
+  const isAncestor = (a: Component, b: Component) => {
+    for (let current = b.parent; current; current = current.parent) {
+      if (current === a) return true
+    }
+    return false
+  }
   for (const component of components) {
     for (const key of component.provides) {
       const existing = providerOf.get(key)
       if (existing && existing !== component) {
-        diagnostics.push(diagnosticAt(component.decl, 'error', 'duplicate-provider',
-          `"${component.name}" provides "${key}", already provided by "${existing.name}" — provisions must be disjoint (paper Def. 43)`))
+        // a nested registration providing its enclosing component's key is
+        // the same provision seen twice, not a conflict
+        if (isAncestor(existing, component) || isAncestor(component, existing)) continue
+        // within one package this is usually two build faces (host/client
+        // entry points) that never share a Context at runtime
+        const samePackage = packageRootOf(component.file) === packageRootOf(existing.file)
+        diagnostics.push(diagnosticAt(component.decl, samePackage ? 'warning' : 'error', 'duplicate-provider',
+          samePackage
+            ? `"${component.name}" provides "${key}", already provided by "${existing.name}" in the same package — fine if these are separate entry points (host/client faces) that never load into one Context`
+            : `"${component.name}" provides "${key}", already provided by "${existing.name}" — provisions must be disjoint (paper Def. 43)`))
         continue
       }
       providerOf.set(key, component)

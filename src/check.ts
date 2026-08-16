@@ -84,7 +84,29 @@ function classifyProperty(name: string, contextType: Type): 'builtin' | 'service
  * Scan a component's bodies for coeffect accesses and verify each against
  * the component's declarations. Records used keys on the component.
  */
-export function checkComponent(component: Component, diagnostics: Diagnostic[], allComponents: Component[] = []): void {
+/** Walk the component chain (inline → enclosing), mirroring cordis's
+ * fiber-chain resolution: a child context may read any key an ancestor
+ * declared. Returns the declaring component, marking usage there. */
+function resolveDeclared(component: Component, key: string): Component | undefined {
+  for (let current: Component | undefined = component; current; current = current.parent) {
+    if (current.provides.has(key) || current.inject.has(key)) return current
+  }
+  return undefined
+}
+
+function chainDynamic(component: Component): boolean {
+  for (let current: Component | undefined = component; current; current = current.parent) {
+    if (current.injectDynamic) return true
+  }
+  return false
+}
+
+export function checkComponent(
+  component: Component,
+  diagnostics: Diagnostic[],
+  allComponents: Component[] = [],
+  accessorKeys: Set<string> = new Set(),
+): void {
   // regions owned by other components nested inside this one (e.g. an
   // inline ctx.inject registration inside a Service method) are theirs to
   // check — walking into them would double-attribute every access
@@ -127,7 +149,7 @@ export function checkComponent(component: Component, diagnostics: Diagnostic[], 
         if (!name) return
         const exprType = expr.getType()
         if (!isContextType(exprType)) return
-        verifyAccess(component, node, name, exprType, diagnostics)
+        verifyAccess(component, node, name, exprType, diagnostics, accessorKeys)
         return
       }
       // reflective operations with a string-literal key:
@@ -145,25 +167,37 @@ export function checkComponent(component: Component, diagnostics: Diagnostic[], 
         if (!isContextType(callee.getExpression().getType())) return
         const keyArg = node.getArguments()[0]
         if (!keyArg || !Node.isStringLiteral(keyArg)) return
-        markServiceUse(component, node, keyArg.getLiteralText(), diagnostics, method === 'get')
+        markServiceUse(component, node, keyArg.getLiteralText(), diagnostics, accessorKeys, method === 'get')
       }
     })
   }
 
-  for (const key of component.inject) {
-    if (!component.used.has(key)) {
-      diagnostics.push(diagnosticAt(component.decl, 'warning', 'unused-inject',
-        `"${component.name}" declares inject "${key}" but never accesses it`))
+}
+
+/** Report declared-but-unused inject keys. Run after every component has
+ * been checked — chain resolution marks usage on the declaring component,
+ * which may be checked before the component that uses the key. */
+export function reportUnusedInject(components: Component[], diagnostics: Diagnostic[]): void {
+  for (const component of components) {
+    for (const key of component.inject) {
+      if (!component.used.has(key)) {
+        diagnostics.push(diagnosticAt(component.decl, 'warning', 'unused-inject',
+          `"${component.name}" declares inject "${key}" but never accesses it`))
+      }
     }
   }
 }
 
-function verifyAccess(component: Component, node: Node, name: string, contextType: Type, diagnostics: Diagnostic[]): void {
+function verifyAccess(component: Component, node: Node, name: string, contextType: Type, diagnostics: Diagnostic[], accessorKeys: Set<string>): void {
+  // accessor-declared members resolve through their own getter at runtime,
+  // not through inject gating — exempt from declaration checking
+  if (accessorKeys.has(name)) return
   // a declared or self-provided key is a service access even when its
   // augmentation is not part of the analyzed file set (partial analysis
   // of a larger project must not flag declared usage)
-  if (component.inject.has(name) || component.provides.has(name)) {
-    component.used.add(name)
+  const declared = resolveDeclared(component, name)
+  if (declared) {
+    declared.used.add(name)
     return
   }
   const kind = classifyProperty(name, contextType)
@@ -173,19 +207,17 @@ function verifyAccess(component: Component, node: Node, name: string, contextTyp
       `"${component.name}" accesses ctx.${name}, which is declared neither by the Context's own package nor by any module augmentation`))
     return
   }
-  markServiceUse(component, node, name, diagnostics)
+  markServiceUse(component, node, name, diagnostics, accessorKeys)
 }
 
-function markServiceUse(component: Component, node: Node, key: string, diagnostics: Diagnostic[], soft = false): void {
-  if (component.provides.has(key)) {
-    component.used.add(key)
+function markServiceUse(component: Component, node: Node, key: string, diagnostics: Diagnostic[], accessorKeys: Set<string>, soft = false): void {
+  if (accessorKeys.has(key)) return
+  const declared = resolveDeclared(component, key)
+  if (declared) {
+    declared.used.add(key)
     return
   }
-  if (component.inject.has(key)) {
-    component.used.add(key)
-    return
-  }
-  if (component.injectDynamic) return
+  if (chainDynamic(component)) return
   if (soft) {
     // ctx.get() is the sanctioned soft access — it returns undefined
     // instead of throwing. Still an undeclared dependency: invisible to

@@ -25,6 +25,20 @@ describe('inject resolution (imported constants, spreads)', () => {
     expect(undeclared[0]!.message).toMatch(/"cache"/)
   })
 
+  it('resolves declarations along the component chain, like the runtime fiber walk', () => {
+    // chain.ts: inline injects ['database'] but reads child.server —
+    // declared by the ENCLOSING component; legal at runtime, so no error
+    const chainDiags = result.diagnostics.filter((d) => d.file.endsWith('chain.ts'))
+    expect(chainDiags.filter((d) => d.severity === 'error')).toEqual([])
+    // and the outer's inject counts as used (no unused-inject for server)
+    expect(chainDiags.filter((d) => d.code === 'unused-inject')).toEqual([])
+  })
+
+  it('exempts accessor-declared members from declaration checking', () => {
+    const flagsDiags = result.diagnostics.filter((d) => d.message.includes('"flags"') || d.message.includes('ctx.flags'))
+    expect(flagsDiags).toEqual([])
+  })
+
   it('discovers inline ctx.inject registrations and checks them', () => {
     const inline = result.components.find((c) => c.name === 'inline#inline')
     expect(inline).toBeDefined()

@@ -19,6 +19,10 @@ export interface Component {
   used: Set<string>
   /** Set for class components: the class name, used to attribute `new X(ctx)`. */
   className?: string
+  /** Enclosing component (e.g. the component whose body contains this
+   * inline registration). Declarations are resolved along this chain,
+   * mirroring cordis's fiber-chain resolution. */
+  parent?: Component
 }
 
 export type Severity = 'error' | 'warning' | 'info'

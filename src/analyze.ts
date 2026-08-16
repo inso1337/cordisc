@@ -2,7 +2,7 @@ import { Node, Project, SourceFile } from 'ts-morph'
 import path from 'node:path'
 import { AnalysisResult, Component, Diagnostic } from './types.js'
 import { discoverComponents } from './discover.js'
-import { checkComponent, getContextHomes } from './check.js'
+import { checkComponent, getContextHomes, reportUnusedInject } from './check.js'
 import { analyzeGraph } from './graph.js'
 import { probeContextType } from './gen.js'
 
@@ -109,9 +109,40 @@ export function analyze(options: AnalyzeOptions): AnalyzeOutput {
 
   mergeInstantiatedClasses(components)
 
+  // parent chain: an inline registration nested inside another component's
+  // body resolves declarations along the chain (cordis walks the fiber
+  // chain upward at runtime, Algorithm 6 of the paper)
   for (const component of components) {
-    checkComponent(component, diagnostics, components)
+    let best: Component | undefined
+    for (const other of components) {
+      if (other === component || other.file !== component.file) continue
+      const contains = other.bodies.some((body) =>
+        component.decl.getStart() >= body.getStart() && component.decl.getEnd() <= body.getEnd())
+      if (!contains) continue
+      if (!best || other.decl.getEnd() - other.decl.getStart() < best.decl.getEnd() - best.decl.getStart()) {
+        best = other
+      }
+    }
+    component.parent = best
   }
+
+  // accessor-declared keys resolve through their own getter, not inject
+  // gating — collect them project-wide and exempt them from checking
+  const accessorKeys = new Set<string>()
+  for (const file of allFiles) {
+    file.forEachDescendant((node) => {
+      if (!Node.isCallExpression(node)) return
+      const callee = node.getExpression()
+      if (!Node.isPropertyAccessExpression(callee) || callee.getName() !== 'accessor') return
+      const keyArg = node.getArguments()[0]
+      if (keyArg && Node.isStringLiteral(keyArg)) accessorKeys.add(keyArg.getLiteralText())
+    })
+  }
+
+  for (const component of components) {
+    checkComponent(component, diagnostics, components, accessorKeys)
+  }
+  reportUnusedInject(components, diagnostics)
   const hint = (key: string): string | undefined => {
     for (const type of contextTypes) {
       const prop = type.getProperty(key)
